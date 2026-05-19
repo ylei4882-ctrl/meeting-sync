@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+browser_data/
+.sent_records.json
+error.log
+debug_*.png
