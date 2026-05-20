@@ -14,7 +14,7 @@ import random
 import string
 from datetime import datetime
 
-if sys.platform == "win32":
+if sys.platform == "win32" and sys.stdout:
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
