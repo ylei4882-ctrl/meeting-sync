@@ -5,3 +5,7 @@ browser_data/
 .cookie_cache.json
 error.log
 debug_*.png
+build/
+dist/
+*.spec
+app.log

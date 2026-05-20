@@ -21,7 +21,10 @@ if sys.platform == "win32":
 import requests
 from playwright.sync_api import sync_playwright
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, 'frozen', False):
+    SCRIPT_DIR = os.path.dirname(sys.executable)
+else:
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
 SENT_RECORDS_PATH = os.path.join(SCRIPT_DIR, ".sent_records.json")
 USER_DATA_DIR = os.path.join(SCRIPT_DIR, "browser_data")

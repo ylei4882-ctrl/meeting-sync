@@ -13,7 +13,10 @@ import meeting_sync as backend
 
 import webview
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, 'frozen', False):
+    SCRIPT_DIR = os.path.dirname(sys.executable)
+else:
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
 
 
@@ -121,24 +124,25 @@ HTML = r"""
 <meta name="viewport" content="width=520">
 <style>
   :root {
-    --bg-primary: #fcfcfc;
-    --bg-card: #f4f5f7;
-    --bg-input: #f1f2f4;
-    --text-primary: #1d1d1f;
-    --text-secondary: #6e6e73;
-    --text-tertiary: #aeaeb2;
-    --border: #e5e5ea;
-    --accent: #0071e3;
-    --accent-hover: #0077ed;
-    --accent-bg: #e8f2fd;
-    --green: #34c759;
-    --yellow: #ff9f0a;
-    --red: #ff3b30;
+    --bg-primary: #fdfdfd;
+    --bg-card: #f8f7f6;
+    --bg-input: #f3f2f0;
+    --text-primary: #2c2c2c;
+    --text-secondary: #8a8a8a;
+    --text-tertiary: #bababa;
+    --border: #e5e4e2;
+    --accent: #d29070;
+    --accent-hover: #daa080;
+    --accent-bg: #fdf7f3;
+    --accent-light: #f4d8c8;
+    --green: #80b080;
+    --yellow: #e8c060;
+    --red: #e08070;
     --radius-sm: 10px;
     --radius: 14px;
     --radius-lg: 18px;
-    --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
-    --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.02);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.04);
     --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Microsoft YaHei UI", "PingFang SC", sans-serif;
     --mono: "SF Mono", "Cascadia Code", "Consolas", monospace;
   }
@@ -146,7 +150,7 @@ HTML = r"""
   body {
     font-family: var(--font);
     font-size: 13px;
-    background: var(--bg-primary);
+    background: linear-gradient(180deg, #fdfdfd 0%, #f8f7f5 100%);
     color: var(--text-primary);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -158,7 +162,7 @@ HTML = r"""
   .title-bar {
     display: flex; align-items: center; justify-content: space-between;
     padding: 14px 20px;
-    background: rgba(255,255,255,0.8);
+    background: rgba(255,255,255,0.85);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--border);
@@ -166,10 +170,10 @@ HTML = r"""
   .title-left { display: flex; align-items: center; gap: 10px; }
   .app-icon {
     width: 32px; height: 32px;
-    background: linear-gradient(135deg, #0071e3, #5ac8fa);
+    background: linear-gradient(135deg, #daa080, #e8c0a0);
     border-radius: 10px;
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 6px rgba(0,113,227,0.25);
+    box-shadow: 0 2px 6px rgba(210, 144, 112, 0.18);
   }
   .app-icon svg { width: 17px; height: 17px; }
   .title-text { font-size: 13px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em; }
@@ -210,7 +214,7 @@ HTML = r"""
   .field-input:focus {
     background: #fff;
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(0,113,227,0.1);
+    box-shadow: 0 0 0 3px rgba(210, 144, 112, 0.06);
   }
 
   .divider { height: 1px; background: var(--border); margin: 0 -20px; }
@@ -228,12 +232,12 @@ HTML = r"""
     display: flex; align-items: center; gap: 5px;
     padding: 7px 15px; font-size: 12px; font-weight: 500;
     color: var(--accent); background: var(--accent-bg);
-    border: 1px solid rgba(0,113,227,0.2);
+    border: 1px solid rgba(210, 144, 112, 0.12);
     border-radius: 9px; cursor: pointer; white-space: nowrap;
     transition: all 0.15s ease;
     font-family: var(--font);
   }
-  .login-btn:hover { background: #dce8f8; }
+  .login-btn:hover { background: #fef0e8; }
   .login-btn:disabled { opacity: 0.45; pointer-events: none; }
   .status-dot {
     width: 7px; height: 7px; border-radius: 50%;
@@ -242,11 +246,11 @@ HTML = r"""
   }
   .status-dot.ok {
     background: var(--green);
-    box-shadow: 0 0 0 3px rgba(52,199,89,0.18);
+    box-shadow: 0 0 0 3px rgba(122,170,126,0.15);
   }
   .status-dot.detecting {
     background: var(--yellow);
-    box-shadow: 0 0 0 3px rgba(255,159,10,0.18);
+    box-shadow: 0 0 0 3px rgba(232,184,80,0.15);
     animation: pulse 1.5s ease-in-out infinite;
   }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
@@ -265,17 +269,17 @@ HTML = r"""
 
   /* ---- Send Button ---- */
   .send-btn {
-    width: 100%; padding: 13px; font-size: 14px; font-weight: 590;
-    color: #fff; background: linear-gradient(180deg, #0077ed 0%, #0062cc 100%);
+    width: 100%; padding: 14px; font-size: 14px; font-weight: 600;
+    color: #fff; background: linear-gradient(180deg, #daa080 0%, #d29070 100%);
     border: none; border-radius: var(--radius);
     cursor: pointer; display: flex; align-items: center;
     justify-content: center; gap: 7px;
-    box-shadow: 0 2px 8px rgba(0,113,227,0.3);
+    box-shadow: 0 3px 12px rgba(210, 144, 112, 0.22);
     transition: all 0.15s ease;
     font-family: var(--font); letter-spacing: 0.01em;
   }
-  .send-btn:hover { background: linear-gradient(180deg, #1083f5 0%, #006edb 100%); }
-  .send-btn:active { transform: scale(0.985); box-shadow: 0 1px 4px rgba(0,113,227,0.2); }
+  .send-btn:hover { background: linear-gradient(180deg, #e8b890 0%, #daa080 100%); }
+  .send-btn:active { transform: scale(0.985); box-shadow: 0 1px 4px rgba(210, 144, 112, 0.12); }
   .send-btn:disabled { opacity: 0.45; pointer-events: none; transform: none; }
 
   /* ---- Log ---- */
@@ -290,10 +294,10 @@ HTML = r"""
   .log-box::-webkit-scrollbar-track { background: transparent; }
   .log-box::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
   .log-box::-webkit-scrollbar-thumb:hover { background: #aaa; }
-  .log-time { color: #0071e3; margin-right: 10px; font-weight: 500; }
-  .log-ok { color: #34c759; }
-  .log-err { color: #ff3b30; }
-  .log-link { color: #ff9f0a; }
+  .log-time { color: #d29070; margin-right: 10px; font-weight: 500; }
+  .log-ok { color: #7aaa7e; }
+  .log-err { color: #e07060; }
+  .log-link { color: #e08860; }
 
 </style>
 </head>
