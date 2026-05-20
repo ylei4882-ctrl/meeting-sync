@@ -64,59 +64,97 @@ def _extract_credentials(page, context):
     return cookie_str, corp_id
 
 
+COOKIE_CACHE = os.path.join(SCRIPT_DIR, ".cookie_cache.json")
+
+
+def _load_cached_cookies():
+    if os.path.exists(COOKIE_CACHE):
+        with open(COOKIE_CACHE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return None
+
+
+def _save_cached_cookies(cookie_str, corp_id):
+    with open(COOKIE_CACHE, "w", encoding="utf-8") as f:
+        json.dump({"cookie_str": cookie_str, "corp_id": corp_id}, f)
+
+
+def _validate_cookies(cookie_str, corp_id):
+    """用一次 API 调用验证 cookie 是否还有效"""
+    import requests as _r
+    try:
+        ts = str(int(time.time() * 1000))
+        url = f"https://meeting.tencent.com/wemeet-cloudrecording-webapi/v1/space?c_app_id=&c_os_model=web&c_os=web&c_os_version=web&c_timestamp={ts}&c_instance_id=5&c_account_corp_id={corp_id}&c_lang=zh-cn"
+        resp = _r.get(url, headers={
+            "Cookie": cookie_str,
+            "Referer": "https://meeting.tencent.com/user-center/meeting-record",
+        }, timeout=5)
+        return resp.status_code == 200 and resp.json().get("code") == 0
+    except Exception:
+        return False
+
+
 def login_and_get_context(force_login=False):
     """获取登录态。有缓存则静默登录，无缓存或强制登录则弹窗扫码。
-    返回 (playwright, cookie_str, corp_id)"""
-    # --- 先尝试 headless 静默登录 ---
+    返回 (cookie_str, corp_id)"""
+    # --- 先尝试从缓存文件读取 cookie ---
     if not force_login:
-        p = sync_playwright().start()
+        cached = _load_cached_cookies()
+        if cached and _validate_cookies(cached["cookie_str"], cached["corp_id"]):
+            return cached["cookie_str"], cached["corp_id"]
+
+    # --- 尝试 headless 静默登录 ---
+    if not force_login:
+        try:
+            with sync_playwright() as p:
+                context = p.chromium.launch_persistent_context(
+                    user_data_dir=USER_DATA_DIR,
+                    headless=True,
+                    viewport={"width": 1280, "height": 800},
+                )
+                page = context.new_page()
+                page.goto("https://meeting.tencent.com/user-center/", wait_until="domcontentloaded", timeout=30_000)
+
+                if "login" not in page.url:
+                    page.goto("https://meeting.tencent.com/user-center/meeting-record", wait_until="domcontentloaded", timeout=30_000)
+                    page.wait_for_load_state("domcontentloaded", timeout=10_000)
+                    cookie_str, corp_id = _extract_credentials(page, context)
+                    page.close()
+                    context.close()
+                    _save_cached_cookies(cookie_str, corp_id)
+                    return cookie_str, corp_id
+
+                page.close()
+                context.close()
+        except Exception:
+            pass
+        raise RuntimeError("需要重新登录")
+
+    # --- 弹窗扫码登录 ---
+    with sync_playwright() as p:
         context = p.chromium.launch_persistent_context(
             user_data_dir=USER_DATA_DIR,
-            headless=True,
+            headless=False,
             viewport={"width": 1280, "height": 800},
         )
         page = context.new_page()
         page.goto("https://meeting.tencent.com/user-center/", wait_until="domcontentloaded", timeout=30_000)
 
-        if "login" not in page.url:
-            # 已登录！静默提取 cookie
-            page.goto("https://meeting.tencent.com/user-center/meeting-record", wait_until="domcontentloaded", timeout=30_000)
-            page.wait_for_load_state("networkidle", timeout=30_000)
-            cookie_str, corp_id = _extract_credentials(page, context)
-            page.close()
-            context.close()
-            return p, cookie_str, corp_id
+        if "login" in page.url:
+            print("\n>>> 请在浏览器中完成登录（微信/企业微信扫码或手机号）...")
+            print("   登录成功后脚本会自动继续。\n")
+            page.wait_for_url("**/user-center/**", timeout=300_000)
+            print("[OK] 登录成功！")
+            time.sleep(2)
 
-        # 需要登录，关闭 headless 上下文
+        page.goto("https://meeting.tencent.com/user-center/meeting-record", wait_until="domcontentloaded", timeout=15_000)
+        time.sleep(1)
+
+        cookie_str, corp_id = _extract_credentials(page, context)
         page.close()
         context.close()
-        p.stop()
-
-    # --- 弹窗扫码登录 ---
-    p = sync_playwright().start()
-    context = p.chromium.launch_persistent_context(
-        user_data_dir=USER_DATA_DIR,
-        headless=False,
-        viewport={"width": 1280, "height": 800},
-    )
-    page = context.new_page()
-    page.goto("https://meeting.tencent.com/user-center/", wait_until="domcontentloaded", timeout=30_000)
-
-    if "login" in page.url:
-        print("\n>>> 请在浏览器中完成登录（微信/企业微信扫码或手机号）...")
-        print("   登录成功后脚本会自动继续。\n")
-        page.wait_for_url("**/user-center/**", timeout=300_000)
-        print("[OK] 登录成功！")
-        time.sleep(2)
-
-    page.goto("https://meeting.tencent.com/user-center/meeting-record", wait_until="domcontentloaded", timeout=30_000)
-    page.wait_for_load_state("networkidle", timeout=30_000)
-    time.sleep(2)
-
-    cookie_str, corp_id = _extract_credentials(page, context)
-    page.close()
-    context.close()
-    return p, cookie_str, corp_id
+        _save_cached_cookies(cookie_str, corp_id)
+        return cookie_str, corp_id
 
 
 # ---------- API ----------
@@ -174,7 +212,7 @@ def call_record_api(cookie_str, corp_id, page_index=1, page_size=10):
 
     url = f"{API_BASE}{RECORD_LIST_PATH}"
     try:
-        resp = requests.post(url, params=params, json=body, headers=headers, timeout=30)
+        resp = requests.post(url, params=params, json=body, headers=headers, timeout=8)
         return resp.json()
     except Exception as e:
         return {"code": -1, "msg": str(e)}
@@ -346,7 +384,7 @@ def fetch_and_process(cookie_str, corp_id, keyword="", deep_search=False, includ
     log = []
 
     log.append(">>> 正在拉取录制列表...")
-    max_pages = 200 if deep_search else 6  # 强力搜索翻所有录制，普通最多60条
+    max_pages = 200 if deep_search else 8  # 强力搜索翻所有录制，普通最多80条
     all_records = []
     for page in range(1, max_pages):
         result = call_record_api(cookie_str, corp_id, page_index=page, page_size=10)
@@ -436,7 +474,7 @@ if __name__ == "__main__":
         print("[X] 请先填写 config.json 中的 dingtalk_webhook")
         sys.exit(1)
 
-    p, cookie_str, corp_id = login_and_get_context()
+    cookie_str, corp_id = login_and_get_context()
     keyword = sys.argv[1].strip() if len(sys.argv) > 1 else ""
 
     meetings, log = fetch_and_process(cookie_str, corp_id, keyword)
@@ -452,4 +490,3 @@ if __name__ == "__main__":
             print(f"[X] 钉钉推送失败: {result}")
 
     print("完成。")
-    p.stop()

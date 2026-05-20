@@ -2,5 +2,6 @@ __pycache__/
 *.pyc
 browser_data/
 .sent_records.json
+.cookie_cache.json
 error.log
 debug_*.png
